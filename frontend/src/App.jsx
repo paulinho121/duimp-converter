@@ -1,0 +1,238 @@
+import React, { useState, useCallback } from 'react';
+import UploadZone from './components/UploadZone';
+import ItemsTable from './components/ItemsTable';
+import DownloadButton from './components/DownloadButton';
+import { convertFiles, debugExcel } from './services/api';
+
+const BRL = v => v?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) ?? '-';
+
+export default function App() {
+  const [duimpFile, setDuimpFile] = useState(null);
+  const [excelFile, setExcelFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState(null);
+  const [adicoes, setAdicoes] = useState([]);
+  const [debugInfo, setDebugInfo] = useState(null);
+
+  async function handleConvert() {
+    if (!duimpFile || !excelFile) {
+      setError('Selecione os dois arquivos antes de processar.');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      const data = await convertFiles(duimpFile, excelFile);
+      setResult(data);
+      setAdicoes(data.adicoes);
+    } catch (e) {
+      setError(e.response?.data?.error || e.message || 'Erro ao processar arquivos.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleUpdateItem(ai, ii, field, value) {
+    setAdicoes(prev => {
+      const next = prev.map((a, aIdx) => {
+        if (aIdx !== ai) return a;
+        const itens = a.itens.map((item, iIdx) =>
+          iIdx === ii ? { ...item, [field]: value } : item
+        );
+        return { ...a, itens };
+      });
+      return next;
+    });
+  }
+
+  function handleReset() {
+    setResult(null);
+    setAdicoes([]);
+    setDuimpFile(null);
+    setExcelFile(null);
+    setError('');
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 py-10 px-4">
+      <div className="max-w-5xl mx-auto">
+
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-extrabold text-white tracking-tight">
+            Conversor DUIMP → XML
+          </h1>
+          <p className="text-gray-400 mt-1 text-sm">
+            Gera o arquivo XML para importação no sistema de gestão aduaneira
+          </p>
+        </div>
+
+        {!result ? (
+          /* Upload screen */
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <UploadZone
+                label="DUIMP (PDF)"
+                accept=".pdf"
+                icon="📄"
+                file={duimpFile}
+                onFile={setDuimpFile}
+              />
+              <UploadZone
+                label="Espelho NF (XLSX)"
+                accept=".xlsx,.xls"
+                icon="📊"
+                file={excelFile}
+                onFile={setExcelFile}
+              />
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleConvert}
+              disabled={loading || !duimpFile || !excelFile}
+              className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold text-lg rounded-xl transition-colors"
+            >
+              {loading ? 'Processando...' : 'PROCESSAR'}
+            </button>
+
+            {excelFile && (
+              <button
+                onClick={async () => {
+                  try {
+                    const d = await debugExcel(excelFile);
+                    setDebugInfo(d);
+                  } catch (e) {
+                    setError(e.message);
+                  }
+                }}
+                className="mt-2 w-full py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-xl"
+              >
+                🔍 Inspecionar estrutura do Excel
+              </button>
+            )}
+
+            {debugInfo && (
+              <div className="mt-4 bg-gray-900 text-green-300 rounded-xl p-4 text-xs overflow-auto max-h-96 font-mono">
+                <p className="text-yellow-300 font-bold mb-2">Abas: {debugInfo.sheetNames.join(', ')} | Total linhas: {debugInfo.totalLinhas}</p>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="text-gray-400">
+                      <th className="text-left pr-3">Linha</th>
+                      <th className="text-left pr-3">Col A</th>
+                      <th className="text-left pr-3">Col B</th>
+                      <th className="text-left pr-3">Col C</th>
+                      <th className="text-left pr-3">Col D</th>
+                      <th className="text-left pr-3">Col E</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {debugInfo.preview.map((r, i) => (
+                      <tr key={i} className={r.col0 ? 'text-green-200' : 'text-gray-500'}>
+                        <td className="pr-3">{r.linha}</td>
+                        <td className="pr-3 max-w-[180px] truncate">{String(r.col0 ?? '')}</td>
+                        <td className="pr-3">{String(r.col1 ?? '')}</td>
+                        <td className="pr-3">{String(r.col2 ?? '')}</td>
+                        <td className="pr-3">{String(r.col3 ?? '')}</td>
+                        <td className="pr-3">{String(r.col4 ?? '')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Review screen */
+          <div className="space-y-6">
+
+            {/* Painel principal de totais */}
+            <div className="bg-gray-800 rounded-2xl overflow-hidden shadow-xl">
+
+              {/* Linha 1: Valor Total NF em destaque */}
+              <div className="bg-green-600 px-8 py-5 flex items-center justify-between">
+                <div>
+                  <p className="text-green-100 text-xs font-semibold uppercase tracking-widest mb-1">
+                    Valor Total da Nota Fiscal
+                  </p>
+                  <p className="text-white text-4xl font-extrabold tracking-tight">
+                    {BRL(result.resumo.totalNF)}
+                  </p>
+                  <p className="text-green-200 text-xs mt-1">
+                    Valor Aduaneiro + II + IPI + PIS + COFINS + AFRMM
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-green-100 text-xs uppercase tracking-widest mb-1">Valor Aduaneiro</p>
+                  <p className="text-white text-2xl font-bold">{BRL(result.resumo.valorTotalBRL)}</p>
+                </div>
+              </div>
+
+              {/* Linha 2: tributos em cards */}
+              <div className="grid grid-cols-5 divide-x divide-gray-700">
+                {[
+                  { label: 'II',     value: result.resumo.iiTotal,     color: 'text-red-400' },
+                  { label: 'IPI',    value: result.resumo.ipiTotal,    color: 'text-orange-400' },
+                  { label: 'PIS',    value: result.resumo.pisTotal,    color: 'text-yellow-400' },
+                  { label: 'COFINS', value: result.resumo.cofinsTotal, color: 'text-yellow-300' },
+                  { label: 'AFRMM', value: result.resumo.afrmmTotal,  color: 'text-blue-400' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="px-5 py-4 text-center">
+                    <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">{label}</p>
+                    <p className={`${color} text-lg font-bold`}>{BRL(value)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Summary bar */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 px-6 py-4 flex flex-wrap gap-6 items-center">
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-semibold">DI</p>
+                <p className="font-mono font-bold text-gray-800">{result.numeroDI}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-semibold">Taxa Câmbio</p>
+                <p className="font-bold text-gray-800">{BRL(result.taxaCambio)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-semibold">Adições</p>
+                <p className="font-bold text-gray-800">{result.resumo.totalAdicoes}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-semibold">Valor Aduaneiro</p>
+                <p className="font-bold text-gray-800">{BRL(result.resumo.valorTotalBRL)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-semibold">II Total</p>
+                <p className="font-bold text-red-700">{BRL(result.resumo.iiTotal)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-semibold">IPI Total</p>
+                <p className="font-bold text-orange-700">{BRL(result.resumo.ipiTotal)}</p>
+              </div>
+              <button
+                onClick={handleReset}
+                className="ml-auto text-sm text-gray-500 hover:text-gray-800 underline"
+              >
+                ← Nova conversão
+              </button>
+            </div>
+
+            {/* Items table */}
+            <ItemsTable adicoes={adicoes} onUpdateItem={handleUpdateItem} />
+
+            {/* Download */}
+            <DownloadButton xmlBase64={result.xmlBase64} numeroDI={result.numeroDI} adicoes={adicoes} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
