@@ -121,7 +121,7 @@ function buildXml(adicoes, d, taxaCambio) {
     t(ad.ele('cofinsAliquotaAdValorem'),                   tr.cofinsAliquotaAdValorem);
     t(ad.ele('cofinsAliquotaEspecificaQuantidadeUnidade'), f.cofinsAliquotaEspecificaQuantidadeUnidade);
     t(ad.ele('cofinsAliquotaEspecificaValor'),             f.cofinsAliquotaEspecificaValor);
-    t(ad.ele('cofinsAliquotaReduzida'),                    f.cofinsAliquotaReduzida);
+    t(ad.ele('cofinsAliquotaReduzida'),                    tr.cofinsAliquotaReduzida ?? f.cofinsAliquotaReduzida);
     t(ad.ele('cofinsAliquotaValorDevido'),                 tr.cofinsAliquotaValorDevido);
     t(ad.ele('cofinsAliquotaValorRecolher'),               tr.cofinsAliquotaValorRecolher);
     t(ad.ele('condicaoVendaIncoterm'),                     f.condicaoVendaIncoterm);
@@ -231,7 +231,7 @@ function buildXml(adicoes, d, taxaCambio) {
     t(ad.ele('pisPasepAliquotaAdValorem'),              tr.pisPasepAliquotaAdValorem);
     t(ad.ele('pisPasepAliquotaEspecificaQuantidadeUnidade'), f.pisPasepAliquotaEspecificaQuantidadeUnidade);
     t(ad.ele('pisPasepAliquotaEspecificaValor'),        f.pisPasepAliquotaEspecificaValor);
-    t(ad.ele('pisPasepAliquotaReduzida'),               f.pisPasepAliquotaReduzida);
+    t(ad.ele('pisPasepAliquotaReduzida'),               tr.pisPasepAliquotaReduzida ?? f.pisPasepAliquotaReduzida);
     t(ad.ele('pisPasepAliquotaValorDevido'),            tr.pisPasepAliquotaValorDevido);
     t(ad.ele('pisPasepAliquotaValorRecolher'),          tr.pisPasepAliquotaValorRecolher);
     t(ad.ele('relacaoCompradorVendedor'),               f.relacaoCompradorVendedor);

@@ -6,7 +6,7 @@ const BASE = import.meta.env.VITE_API_URL || '';
 
 // mode: 'excel' | 'xml'. No modo 'xml' o espelho é uma NF-e e a taxa de
 // câmbio (Dólar Fiscal) é informada manualmente.
-export async function convertFiles(duimpFile, espelhoFile, mode = 'excel', taxaCambio = '') {
+export async function convertFiles(duimpFile, espelhoFile, mode = 'excel', taxaCambio = '', reducaoOverrides = []) {
   const form = new FormData();
   form.append('duimp', duimpFile);
   if (mode === 'xml') {
@@ -14,6 +14,9 @@ export async function convertFiles(duimpFile, espelhoFile, mode = 'excel', taxaC
     form.append('taxaCambio', taxaCambio);
   } else {
     form.append('excel', espelhoFile);
+  }
+  if (reducaoOverrides?.length) {
+    form.append('reducaoOverrides', JSON.stringify(reducaoOverrides));
   }
 
   const { data } = await axios.post(`${BASE}/api/convert`, form, {

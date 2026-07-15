@@ -72,7 +72,7 @@ function getConfig(ncm, aliqIIReal) {
  *    - Se não → todos os itens desse NCM vão para o mesmo grupo.
  * 3. A ordem das adições no XML segue a primeira aparição de cada grupo.
  */
-function groupByNcm(itensDuimp, itensExcel, taxaCambio) {
+function groupByNcm(itensDuimp, itensExcel, taxaCambio, reducaoOverrides = []) {
   // Detectar se a primeira ocorrência de cada NCM é AD1
   const ncmPrimeiroAd = {};
   for (const item of itensExcel) {
@@ -130,7 +130,7 @@ function groupByNcm(itensDuimp, itensExcel, taxaCambio) {
       return s + (isKg ? (i.peso || 0) : (i.qtd || 0));
     }, 0);
 
-    const tributos = calcularTributosAdicao(itensCombinados, config, taxaCambio);
+    const tributos = calcularTributosAdicao(itensCombinados, config, taxaCambio, reducaoOverrides[adicoes.length]);
     const totalBRL   = itensCombinados.reduce((s, i) => s + i.vlTotal, 0);
     const vlIITotal  = itensCombinados.reduce((s, i) => s + i.vlII, 0);
     const vlIPITotal = itensCombinados.reduce((s, i) => s + i.vlIPI, 0);
@@ -141,6 +141,8 @@ function groupByNcm(itensDuimp, itensExcel, taxaCambio) {
       config,
       itens: itensCombinados,
       tributos,
+      reducao: tributos._reducao,
+      reducaoAuto: tributos._reducaoAuto,
       totalBRL,
       vlIITotal,
       vlIPITotal,
@@ -162,7 +164,7 @@ function groupByNcm(itensDuimp, itensExcel, taxaCambio) {
  * Os dados descritivos (peso, unidade) continuam vindo da DUIMP (PDF),
  * casados por posição (`colIdx`), igual ao fluxo do Excel.
  */
-function groupByAdicao(itensDuimp, itensXml, taxaCambio) {
+function groupByAdicao(itensDuimp, itensXml, taxaCambio, reducaoOverrides = []) {
   const grupos = new Map(); // nAdicao → itens[]
   const ordem = [];
 
@@ -199,7 +201,7 @@ function groupByAdicao(itensDuimp, itensXml, taxaCambio) {
       return s + (isKg ? (i.peso || 0) : (i.qtd || 0));
     }, 0);
 
-    const tributos = calcularTributosAdicao(itensCombinados, config, taxaCambio);
+    const tributos = calcularTributosAdicao(itensCombinados, config, taxaCambio, reducaoOverrides[adicoes.length]);
     const totalBRL    = itensCombinados.reduce((s, i) => s + i.vlTotal, 0);
     const vlIITotal   = itensCombinados.reduce((s, i) => s + i.vlII, 0);
     const vlIPITotal  = itensCombinados.reduce((s, i) => s + i.vlIPI, 0);
@@ -210,6 +212,8 @@ function groupByAdicao(itensDuimp, itensXml, taxaCambio) {
       config,
       itens: itensCombinados,
       tributos,
+      reducao: tributos._reducao,
+      reducaoAuto: tributos._reducaoAuto,
       totalBRL,
       vlIITotal,
       vlIPITotal,

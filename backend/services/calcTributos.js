@@ -41,7 +41,11 @@ function formatPeso(kg) {
   return String(Math.round(kg * 1000)).padStart(15, '0');
 }
 
-function calcularTributosAdicao(itens, config, taxaCambio) {
+// Alíquotas nominais (cheias) de PIS/COFINS-Importação
+const PIS_ALIQ_CHEIA = 0.021;      // 2,10%
+const COFINS_ALIQ_CHEIA = 0.0965;  // 9,65%
+
+function calcularTributosAdicao(itens, config, taxaCambio, reducaoOverride) {
   const totalBRL  = itens.reduce((s, i) => s + i.vlTotal, 0);
   const baseII    = itens.reduce((s, i) => s + i.baseII, 0);
   const vlII      = itens.reduce((s, i) => s + i.vlII, 0);
@@ -71,10 +75,25 @@ function calcularTributosAdicao(itens, config, taxaCambio) {
 
   const aliqII     = aliqEspelho('aliqII')     || config.aliqII     || 0;
   const aliqIPI    = aliqEspelho('aliqIPI')    || config.aliqIPI    || 0;
-  const aliqPIS    = aliqEspelho('aliqPIS')    || config.aliqPIS    || 0;
-  const aliqCOFINS = aliqEspelho('aliqCOFINS') || config.aliqCOFINS || 0;
-  const regimePIS     = config.regimePIS;
-  const nomeRegimePIS = config.nomeRegimePIS;
+
+  // PIS/COFINS: alíquota EFETIVA aplicada (valor devido ÷ base). Se estiver
+  // bem abaixo da nominal, há redução. O usuário pode sobrepor a detecção.
+  const aliqPisAplicada    = baseII > 0 ? vlPIS / baseII : 0;
+  const aliqCofinsAplicada = baseII > 0 ? vlCOFINS / baseII : 0;
+  const reducaoAuto = aliqPisAplicada > 0 && aliqPisAplicada < PIS_ALIQ_CHEIA * 0.5;
+  const reducao = (reducaoOverride === undefined || reducaoOverride === null)
+    ? reducaoAuto
+    : !!reducaoOverride;
+
+  // Com redução (padrão do extrato da DUIMP): ad valorem = alíquota CHEIA,
+  // e a alíquota reduzida vai no campo próprio. Sem redução: ad valorem = a
+  // própria alíquota aplicada (cheia) e reduzida zerada.
+  const aliqPisAdVal    = reducao ? PIS_ALIQ_CHEIA    : (aliqPisAplicada    || PIS_ALIQ_CHEIA);
+  const aliqPisReduzida = reducao ? aliqPisAplicada   : 0;
+  const aliqCofAdVal    = reducao ? COFINS_ALIQ_CHEIA : (aliqCofinsAplicada || COFINS_ALIQ_CHEIA);
+  const aliqCofReduzida = reducao ? aliqCofinsAplicada : 0;
+  const regimePIS     = reducao ? '6' : '1';
+  const nomeRegimePIS = reducao ? 'REDUCAO' : 'RECOLHIMENTO INTEGRAL';
 
   return {
     condicaoVendaValorMoeda:             formatValorMoeda(totalBRL, taxaCambio),
@@ -91,14 +110,18 @@ function calcularTributosAdicao(itens, config, taxaCambio) {
     pisCofinsBaseCalculoValor:           format15(baseII),
     pisCofinsRegimeTributacaoCodigo:     regimePIS,
     pisCofinsRegimeTributacaoNome:       nomeRegimePIS,
-    cofinsAliquotaAdValorem:             formatAliquota(aliqCOFINS),
+    cofinsAliquotaAdValorem:             formatAliquota(aliqCofAdVal),
+    cofinsAliquotaReduzida:              formatAliquota(aliqCofReduzida),
     cofinsAliquotaValorDevido:           format15(vlCOFINS),
     cofinsAliquotaValorRecolher:         format15(vlCOFINS),
-    pisPasepAliquotaAdValorem:           formatAliquota(aliqPIS),
+    pisPasepAliquotaAdValorem:           formatAliquota(aliqPisAdVal),
+    pisPasepAliquotaReduzida:            formatAliquota(aliqPisReduzida),
     pisPasepAliquotaValorDevido:         format15(vlPIS),
     pisPasepAliquotaValorRecolher:       format15(vlPIS),
     valorReaisFreteInternacional:        format15(vlAFRMM),
     valorTotalCondicaoVenda:             formatValorTotalCV(totalBRL, taxaCambio),
+    _reducao: reducao,
+    _reducaoAuto: reducaoAuto,
     _totais: { totalBRL, vlII, vlIPI, vlPIS, vlCOFINS },
   };
 }

@@ -13,13 +13,26 @@ export default function App() {
   const [xmlFile, setXmlFile] = useState(null);
   const [taxaCambio, setTaxaCambio] = useState('');
   const [loading, setLoading] = useState(false);
+  const [reprocessando, setReprocessando] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const [adicoes, setAdicoes] = useState([]);
+  const [reducaoOverrides, setReducaoOverrides] = useState([]);
   const [debugInfo, setDebugInfo] = useState(null);
 
   const espelhoFile = mode === 'xml' ? xmlFile : excelFile;
   const podeProcessar = duimpFile && espelhoFile && (mode !== 'xml' || taxaCambio.trim());
+
+  // Preserva as edições do usuário (código ERP, tipo IP, descrição) ao reprocessar
+  function mergeEdits(oldAd, newAd) {
+    return newAd.map((a, ai) => ({
+      ...a,
+      itens: a.itens.map((item, ii) => {
+        const old = oldAd?.[ai]?.itens?.[ii];
+        return old ? { ...item, _codigo: old._codigo, _tipoIP: old._tipoIP, descricao: old.descricao } : item;
+      }),
+    }));
+  }
 
   async function handleConvert() {
     if (!duimpFile || !espelhoFile) {
@@ -32,14 +45,34 @@ export default function App() {
     }
     setError('');
     setLoading(true);
+    setReducaoOverrides([]);
     try {
-      const data = await convertFiles(duimpFile, espelhoFile, mode, taxaCambio);
+      const data = await convertFiles(duimpFile, espelhoFile, mode, taxaCambio, []);
       setResult(data);
       setAdicoes(data.adicoes);
     } catch (e) {
       setError(e.response?.data?.error || e.message || 'Erro ao processar arquivos.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Liga/desliga a redução de PIS/COFINS de uma adição e reprocessa no backend,
+  // preservando as edições feitas na tela.
+  async function handleToggleReducao(ai, value) {
+    const novos = [...reducaoOverrides];
+    novos[ai] = value;
+    setReducaoOverrides(novos);
+    setReprocessando(true);
+    setError('');
+    try {
+      const data = await convertFiles(duimpFile, espelhoFile, mode, taxaCambio, novos);
+      setAdicoes(prev => mergeEdits(prev, data.adicoes));
+      setResult(data);
+    } catch (e) {
+      setError(e.response?.data?.error || e.message || 'Erro ao reprocessar.');
+    } finally {
+      setReprocessando(false);
     }
   }
 
@@ -63,6 +96,7 @@ export default function App() {
     setExcelFile(null);
     setXmlFile(null);
     setTaxaCambio('');
+    setReducaoOverrides([]);
     setError('');
   }
 
@@ -303,7 +337,12 @@ export default function App() {
             </div>
 
             {/* Items table */}
-            <ItemsTable adicoes={adicoes} onUpdateItem={handleUpdateItem} />
+            <ItemsTable
+              adicoes={adicoes}
+              onUpdateItem={handleUpdateItem}
+              onToggleReducao={handleToggleReducao}
+              reprocessando={reprocessando}
+            />
 
             {/* Download */}
             <DownloadButton xmlBase64={result.xmlBase64} numeroDI={result.numeroDI} adicoes={adicoes} />

@@ -2,15 +2,43 @@ import React from 'react';
 
 const BRL = v => v?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) ?? '-';
 
-export default function ItemsTable({ adicoes, onUpdateItem }) {
+export default function ItemsTable({ adicoes, onUpdateItem, onToggleReducao, reprocessando }) {
   return (
     <div className="space-y-6">
+      {reprocessando && (
+        <div className="text-center text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg py-2">
+          Atualizando redução de PIS/COFINS…
+        </div>
+      )}
       {adicoes.map((adicao, ai) => (
         <div key={ai} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="bg-gray-800 text-white px-4 py-3 flex items-center gap-3">
             <span className="font-bold text-lg">ADIÇÃO {String(ai + 1).padStart(3, '0')}</span>
             <span className="text-gray-300 text-sm">NCM {adicao.ncm}</span>
-            <span className="ml-auto text-blue-300 text-sm font-medium">{adicao.config.descricao}</span>
+            <span className="text-blue-300 text-sm font-medium truncate max-w-[40%]">{adicao.config.descricao}</span>
+
+            {/* Toggle de redução PIS/COFINS */}
+            {onToggleReducao && (
+              <label className="ml-auto flex items-center gap-2 text-xs cursor-pointer select-none">
+                <span className={adicao.reducao ? 'text-green-300 font-semibold' : 'text-gray-400'}>
+                  PIS/COFINS c/ redução
+                </span>
+                <button
+                  type="button"
+                  disabled={reprocessando}
+                  onClick={() => onToggleReducao(ai, !adicao.reducao)}
+                  className={`relative w-10 h-5 rounded-full transition-colors disabled:opacity-50
+                    ${adicao.reducao ? 'bg-green-500' : 'bg-gray-600'}`}
+                  title={adicao.reducao !== adicao.reducaoAuto ? 'Ajustado manualmente' : 'Detectado automaticamente'}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform
+                    ${adicao.reducao ? 'translate-x-5' : ''}`} />
+                </button>
+                {adicao.reducao !== adicao.reducaoAuto && (
+                  <span className="text-yellow-300" title="Diferente do detectado automaticamente">●</span>
+                )}
+              </label>
+            )}
           </div>
 
           <div className="overflow-x-auto">

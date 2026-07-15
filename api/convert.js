@@ -18,6 +18,17 @@ function parseTaxa(v) {
   return parseFloat(String(v ?? '').trim().replace(',', '.')) || 0;
 }
 
+// Override de redução PIS/COFINS por adição: array com true/false/null (JSON)
+function parseOverrides(v) {
+  if (!v) return [];
+  try {
+    const arr = typeof v === 'string' ? JSON.parse(v) : v;
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
 // Helper: promisify multer para serverless
 function runMiddleware(req, res, fn) {
   return new Promise((resolve, reject) => {
@@ -47,6 +58,7 @@ module.exports = async (req, res) => {
     }
 
     const dadosDuimp = await parseDuimp(req.files.duimp[0].buffer);
+    const reducaoOverrides = parseOverrides(req.body.reducaoOverrides);
 
     let adicoes;
     let taxaCambio;
@@ -59,11 +71,11 @@ module.exports = async (req, res) => {
       }
       const dadosXml = parseXmlEspelho(req.files.xml[0].buffer);
       ufDesembaraco = dadosXml.ufDesembaraco || ufDesembaraco;
-      adicoes = groupByAdicao(dadosDuimp.itens, dadosXml.itens, taxaCambio);
+      adicoes = groupByAdicao(dadosDuimp.itens, dadosXml.itens, taxaCambio, reducaoOverrides);
     } else {
       const dadosExcel = parseExcel(req.files.excel[0].buffer);
       taxaCambio = dadosExcel.taxaCambio;
-      adicoes = groupByNcm(dadosDuimp.itens, dadosExcel.itens, taxaCambio);
+      adicoes = groupByNcm(dadosDuimp.itens, dadosExcel.itens, taxaCambio, reducaoOverrides);
     }
 
     const xmlString  = buildXml(adicoes, dadosDuimp, taxaCambio);

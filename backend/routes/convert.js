@@ -16,6 +16,17 @@ function parseTaxa(v) {
   return parseFloat(String(v ?? '').trim().replace(',', '.')) || 0;
 }
 
+// Override de redução PIS/COFINS por adição: array com true/false/null (JSON)
+function parseOverrides(v) {
+  if (!v) return [];
+  try {
+    const arr = typeof v === 'string' ? JSON.parse(v) : v;
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
 router.post('/convert', upload.fields([
   { name: 'duimp', maxCount: 1 },
   { name: 'excel', maxCount: 1 },
@@ -33,6 +44,7 @@ router.post('/convert', upload.fields([
     }
 
     const dadosDuimp = await parseDuimp(req.files.duimp[0].buffer);
+    const reducaoOverrides = parseOverrides(req.body.reducaoOverrides);
 
     let adicoes;
     let taxaCambio;
@@ -45,11 +57,11 @@ router.post('/convert', upload.fields([
       }
       const dadosXml = parseXmlEspelho(req.files.xml[0].buffer);
       ufDesembaraco = dadosXml.ufDesembaraco || ufDesembaraco;
-      adicoes = groupByAdicao(dadosDuimp.itens, dadosXml.itens, taxaCambio);
+      adicoes = groupByAdicao(dadosDuimp.itens, dadosXml.itens, taxaCambio, reducaoOverrides);
     } else {
       const dadosExcel = parseExcel(req.files.excel[0].buffer);
       taxaCambio = dadosExcel.taxaCambio;
-      adicoes = groupByNcm(dadosDuimp.itens, dadosExcel.itens, taxaCambio);
+      adicoes = groupByNcm(dadosDuimp.itens, dadosExcel.itens, taxaCambio, reducaoOverrides);
     }
 
     const xmlString = buildXml(adicoes, dadosDuimp, taxaCambio);
