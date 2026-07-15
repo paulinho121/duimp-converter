@@ -4,30 +4,53 @@ const XLSX = require('xlsx');
 const router = express.Router();
 const parseDuimp = require('../services/parseDuimp');
 const parseExcel = require('../services/parseExcel');
-const { groupByNcm } = require('../services/groupByNcm');
+const parseXmlEspelho = require('../services/parseXmlEspelho');
+const { groupByNcm, groupByAdicao } = require('../services/groupByNcm');
 const calcTributos = require('../services/calcTributos');
 const buildXml = require('../services/buildXml');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Converte a taxa de câmbio informada na tela (aceita "5,0139" ou "5.0139")
+function parseTaxa(v) {
+  return parseFloat(String(v ?? '').trim().replace(',', '.')) || 0;
+}
+
 router.post('/convert', upload.fields([
   { name: 'duimp', maxCount: 1 },
   { name: 'excel', maxCount: 1 },
+  { name: 'xml',   maxCount: 1 },
 ]), async (req, res) => {
   try {
-    if (!req.files?.duimp || !req.files?.excel) {
-      return res.status(400).json({ success: false, error: 'Envie os arquivos PDF (duimp) e XLSX (excel).' });
+    const temExcel = !!req.files?.excel;
+    const temXml   = !!req.files?.xml;
+
+    if (!req.files?.duimp || (!temExcel && !temXml)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Envie o PDF (duimp) e o espelho: XLSX (excel) ou XML (xml).',
+      });
     }
 
-    const duimpBuffer = req.files.duimp[0].buffer;
-    const excelBuffer = req.files.excel[0].buffer;
+    const dadosDuimp = await parseDuimp(req.files.duimp[0].buffer);
 
-    const dadosDuimp = await parseDuimp(duimpBuffer);
-    const dadosExcel = parseExcel(excelBuffer);
+    let adicoes;
+    let taxaCambio;
 
-    const adicoes = groupByNcm(dadosDuimp.itens, dadosExcel.itens, dadosExcel.taxaCambio);
+    if (temXml) {
+      taxaCambio = parseTaxa(req.body.taxaCambio);
+      if (!taxaCambio) {
+        return res.status(400).json({ success: false, error: 'Informe a taxa de câmbio (Dólar Fiscal) para o espelho em XML.' });
+      }
+      const dadosXml = parseXmlEspelho(req.files.xml[0].buffer);
+      adicoes = groupByAdicao(dadosDuimp.itens, dadosXml.itens, taxaCambio);
+    } else {
+      const dadosExcel = parseExcel(req.files.excel[0].buffer);
+      taxaCambio = dadosExcel.taxaCambio;
+      adicoes = groupByNcm(dadosDuimp.itens, dadosExcel.itens, taxaCambio);
+    }
 
-    const xmlString = buildXml(adicoes, dadosDuimp, dadosExcel.taxaCambio);
+    const xmlString = buildXml(adicoes, dadosDuimp, taxaCambio);
     const xmlBase64 = Buffer.from(xmlString, 'utf8').toString('base64');
 
     const valorTotalBRL = adicoes.reduce((s, a) => s + a.totalBRL, 0);
@@ -53,7 +76,7 @@ router.post('/convert', upload.fields([
     res.json({
       success: true,
       numeroDI: dadosDuimp.numeroDI,
-      taxaCambio: dadosExcel.taxaCambio,
+      taxaCambio,
       adicoes,
       xmlBase64,
       resumo,

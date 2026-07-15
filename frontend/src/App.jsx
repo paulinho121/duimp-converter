@@ -7,23 +7,33 @@ import { convertFiles, debugExcel } from './services/api';
 const BRL = v => v?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) ?? '-';
 
 export default function App() {
+  const [mode, setMode] = useState('excel'); // 'excel' | 'xml'
   const [duimpFile, setDuimpFile] = useState(null);
   const [excelFile, setExcelFile] = useState(null);
+  const [xmlFile, setXmlFile] = useState(null);
+  const [taxaCambio, setTaxaCambio] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const [adicoes, setAdicoes] = useState([]);
   const [debugInfo, setDebugInfo] = useState(null);
 
+  const espelhoFile = mode === 'xml' ? xmlFile : excelFile;
+  const podeProcessar = duimpFile && espelhoFile && (mode !== 'xml' || taxaCambio.trim());
+
   async function handleConvert() {
-    if (!duimpFile || !excelFile) {
-      setError('Selecione os dois arquivos antes de processar.');
+    if (!duimpFile || !espelhoFile) {
+      setError('Selecione o PDF da DUIMP e o espelho antes de processar.');
+      return;
+    }
+    if (mode === 'xml' && !taxaCambio.trim()) {
+      setError('Informe a taxa de câmbio (Dólar Fiscal) para o espelho em XML.');
       return;
     }
     setError('');
     setLoading(true);
     try {
-      const data = await convertFiles(duimpFile, excelFile);
+      const data = await convertFiles(duimpFile, espelhoFile, mode, taxaCambio);
       setResult(data);
       setAdicoes(data.adicoes);
     } catch (e) {
@@ -51,6 +61,8 @@ export default function App() {
     setAdicoes([]);
     setDuimpFile(null);
     setExcelFile(null);
+    setXmlFile(null);
+    setTaxaCambio('');
     setError('');
   }
 
@@ -71,6 +83,32 @@ export default function App() {
         {!result ? (
           /* Upload screen */
           <div className="bg-white rounded-2xl shadow-xl p-8">
+
+            {/* Seletor de formato do espelho */}
+            <div className="mb-6">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+                Formato do espelho
+              </p>
+              <div className="inline-flex rounded-xl bg-gray-100 p-1">
+                <button
+                  onClick={() => { setMode('excel'); setError(''); }}
+                  className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    mode === 'excel' ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  📊 Excel (XLSX)
+                </button>
+                <button
+                  onClick={() => { setMode('xml'); setError(''); }}
+                  className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    mode === 'xml' ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  🧾 XML (NF-e)
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <UploadZone
                 label="DUIMP (PDF)"
@@ -79,14 +117,44 @@ export default function App() {
                 file={duimpFile}
                 onFile={setDuimpFile}
               />
-              <UploadZone
-                label="Espelho NF (XLSX)"
-                accept=".xlsx,.xls"
-                icon="📊"
-                file={excelFile}
-                onFile={setExcelFile}
-              />
+              {mode === 'excel' ? (
+                <UploadZone
+                  label="Espelho NF (XLSX)"
+                  accept=".xlsx,.xls"
+                  icon="📊"
+                  file={excelFile}
+                  onFile={setExcelFile}
+                />
+              ) : (
+                <UploadZone
+                  label="Espelho NF (XML)"
+                  accept=".xml"
+                  icon="🧾"
+                  file={xmlFile}
+                  onFile={setXmlFile}
+                />
+              )}
             </div>
+
+            {/* Taxa de câmbio — obrigatória no modo XML (a NF-e não a contém) */}
+            {mode === 'xml' && (
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Taxa de câmbio (Dólar Fiscal)
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={taxaCambio}
+                  onChange={e => setTaxaCambio(e.target.value)}
+                  placeholder="Ex.: 5,0139"
+                  className="w-full md:w-64 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  A NF-e não traz a taxa de câmbio — informe o mesmo Dólar Fiscal usado no espelho.
+                </p>
+              </div>
+            )}
 
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
@@ -96,13 +164,13 @@ export default function App() {
 
             <button
               onClick={handleConvert}
-              disabled={loading || !duimpFile || !excelFile}
+              disabled={loading || !podeProcessar}
               className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold text-lg rounded-xl transition-colors"
             >
               {loading ? 'Processando...' : 'PROCESSAR'}
             </button>
 
-            {excelFile && (
+            {mode === 'excel' && excelFile && (
               <button
                 onClick={async () => {
                   try {

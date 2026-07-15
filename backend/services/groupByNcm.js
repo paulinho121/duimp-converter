@@ -152,4 +152,73 @@ function groupByNcm(itensDuimp, itensExcel, taxaCambio) {
   return adicoes;
 }
 
-module.exports = { groupByNcm, ADICOES_CONFIG };
+/**
+ * Agrupamento para o espelho em XML (NF-e).
+ *
+ * A NF-e já traz o número da adição (`nAdicao`) por item, que é o campo
+ * oficial da DI — então o agrupamento é direto: itens com o mesmo `nAdicao`
+ * formam uma adição, preservando a ordem de primeira aparição.
+ *
+ * Os dados descritivos (peso, unidade) continuam vindo da DUIMP (PDF),
+ * casados por posição (`colIdx`), igual ao fluxo do Excel.
+ */
+function groupByAdicao(itensDuimp, itensXml, taxaCambio) {
+  const grupos = new Map(); // nAdicao → itens[]
+  const ordem = [];
+
+  for (const item of itensXml) {
+    const chave = String(item.nAdicao);
+    if (!grupos.has(chave)) {
+      grupos.set(chave, []);
+      ordem.push(chave);
+    }
+    grupos.get(chave).push(item);
+  }
+
+  const adicoes = [];
+
+  for (const chave of ordem) {
+    const xmlItens = grupos.get(chave);
+    const ncm = xmlItens[0].ncm;
+    const aliqIIReal = xmlItens[0]?.aliqII || 0;
+    const config = getConfig(ncm, aliqIIReal);
+
+    const itensCombinados = xmlItens.map((exItem) => {
+      const duimpItem = itensDuimp[exItem.colIdx] || {};
+      return {
+        ...exItem,
+        qtd: exItem.qtd || duimpItem.qtd || 0,
+        peso: duimpItem.peso || 0,
+        unidade: duimpItem.unidade || config.unidadeEstatistica,
+        descricao: duimpItem.descricao || exItem.descricao || config.descricao,
+      };
+    });
+
+    const isKg = config.unidadeEstatistica === 'QUILOGRAMA LIQUIDO';
+    const qtdEstatistica = itensCombinados.reduce((s, i) => {
+      return s + (isKg ? (i.peso || 0) : (i.qtd || 0));
+    }, 0);
+
+    const tributos = calcularTributosAdicao(itensCombinados, config, taxaCambio);
+    const totalBRL    = itensCombinados.reduce((s, i) => s + i.vlTotal, 0);
+    const vlIITotal   = itensCombinados.reduce((s, i) => s + i.vlII, 0);
+    const vlIPITotal  = itensCombinados.reduce((s, i) => s + i.vlIPI, 0);
+    const pesoLiquido = itensCombinados.reduce((s, i) => s + i.peso, 0);
+
+    adicoes.push({
+      ncm,
+      config,
+      itens: itensCombinados,
+      tributos,
+      totalBRL,
+      vlIITotal,
+      vlIPITotal,
+      pesoLiquido,
+      qtdEstatistica,
+    });
+  }
+
+  return adicoes;
+}
+
+module.exports = { groupByNcm, groupByAdicao, getConfig, ADICOES_CONFIG };
