@@ -79,12 +79,19 @@ router.post('/convert', upload.fields([
     const icms        = entrouPorSP ? calcTributos.calcularICMS(adicoes) : { valor: 0, aliquota: 0, baseCalculo: 0 };
     const icmsTotal   = icms.valor;
 
-    const totalNF = valorTotalBRL + iiTotal + ipiTotal + pisTotal + cofinsTotal + afrmmTotal + icmsTotal;
+    // Despesas acessórias (vOutro na NF-e) e valor do produto (vProd = aduaneiro + II)
+    const despesasTotal = adicoes.reduce((s, a) => s + a.itens.reduce((x, i) => x + (i.despesas || 0), 0), 0);
+    const valorProduto  = adicoes.reduce((s, a) => s + a.itens.reduce((x, i) => x + (i.vProd || (i.vlTotal + i.vlII)), 0), 0);
+
+    // Total da NF = vNF da NF-e: Produto + II + IPI + PIS + COFINS + AFRMM + ICMS + despesas
+    const totalNF = valorProduto + iiTotal + ipiTotal + pisTotal + cofinsTotal + afrmmTotal + icmsTotal + despesasTotal;
 
     const resumo = {
       totalItens:   adicoes.reduce((s, a) => s + a.itens.length, 0),
       totalAdicoes: adicoes.length,
       valorTotalBRL,
+      valorProduto,
+      despesasTotal,
       iiTotal,
       ipiTotal,
       pisTotal,

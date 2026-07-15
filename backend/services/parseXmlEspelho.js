@@ -48,6 +48,7 @@ function parseXmlEspelho(buffer) {
     const qtd    = num(tag(prod, 'qCom'));
     const vlUnit = num(tag(prod, 'vUnCom'));
     const despesas = num(tag(prod, 'vOutro'));  // outras despesas (compõem a base do ICMS)
+    const vProd    = num(tag(prod, 'vProd'));    // valor do produto (= aduaneiro + II)
 
     // II — a base do II é o valor aduaneiro do item
     const iiBlock = block(det, 'II');
@@ -90,6 +91,7 @@ function parseXmlEspelho(buffer) {
       vlCOFINS, aliqCOFINS,
       vlAFRMM,
       despesas,
+      vProd,
     };
   }).filter(i => i.ncm.length === 8 && i.vlTotal > 0);
 

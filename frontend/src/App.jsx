@@ -267,8 +267,8 @@ export default function App() {
                     {BRL(result.resumo.totalNF)}
                   </p>
                   <p className="text-green-200 text-xs mt-1">
-                    Valor Aduaneiro + II + IPI + PIS + COFINS + AFRMM
-                    {result.resumo.entrouPorSP && ' + ICMS'}
+                    Produto (Aduaneiro+II) + II + IPI + PIS + COFINS + AFRMM
+                    {result.resumo.entrouPorSP && ' + ICMS'} + Despesas · igual ao vNF da NF-e
                   </p>
                 </div>
                 <div className="text-right">
