@@ -1,89 +1,80 @@
-const { create } = require('xmlbuilder2');
+// Extrai os dados fiscais por item de um espelho no formato NF-e (modelo 55).
+//
+// A extração é feita por regex sobre os blocos <det> (mesmo estilo do
+// parseDuimp). Optamos por NÃO usar a conversão para objeto do xmlbuilder2
+// porque o empacotamento de texto varia entre versões da lib, o que causava
+// itens vazios em produção (Vercel). Regex sobre os elementos-folha da NF-e
+// é determinístico em qualquer ambiente.
 
 // Converte texto numérico ("1.234,56" ou "1234.56") em Number
 function num(v) {
   if (v == null) return 0;
   let s = String(v).trim();
-  // Formato pt-BR "1.234,56" → remove milhar, troca vírgula por ponto
   if (/,\d+$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
   return parseFloat(s) || 0;
 }
 
-// Primeiro filho existente entre várias chaves possíveis (ex.: PISOutr, PISAliq, PISNT)
-function firstOf(obj, keys) {
-  for (const k of keys) {
-    if (obj && obj[k] != null) return obj[k];
-  }
-  return {};
+// Texto do primeiro elemento <name>...</name> dentro de um trecho
+function tag(chunk, name) {
+  if (!chunk) return '';
+  const m = chunk.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`));
+  return m ? m[1].trim() : '';
 }
 
-/**
- * Extrai os dados fiscais por item de um espelho no formato NF-e (modelo 55).
- * Devolve a MESMA estrutura de item que o parseExcel produz, para que o
- * agrupamento e o cálculo de tributos reaproveitem a mesma lógica.
- *
- * Observação: a taxa de câmbio NÃO existe na NF-e — ela é informada
- * manualmente na tela e passada adiante pela rota.
- */
+// Conteúdo do primeiro bloco <name>...</name> (aceita atributos na abertura)
+function block(chunk, name) {
+  if (!chunk) return '';
+  const m = chunk.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`));
+  return m ? m[1] : '';
+}
+
 function parseXmlEspelho(buffer) {
   const xml = buffer.toString('utf8');
 
-  let obj;
-  try {
-    obj = create(xml).end({ format: 'object' });
-  } catch (e) {
-    throw new Error('Arquivo XML inválido ou corrompido.');
+  // Cada item da NF-e é um bloco <det ...>...</det>
+  const dets = xml.match(/<det\b[\s\S]*?<\/det>/g) || [];
+  if (dets.length === 0) {
+    throw new Error('XML não reconhecido como NF-e (nenhum item <det> encontrado).');
   }
-
-  const infNFe = obj?.nfeProc?.NFe?.infNFe || obj?.NFe?.infNFe;
-  if (!infNFe) {
-    throw new Error('XML não reconhecido como NF-e (elemento infNFe não encontrado).');
-  }
-
-  let dets = infNFe.det;
-  if (!dets) throw new Error('NF-e sem itens (nenhum elemento <det>).');
-  if (!Array.isArray(dets)) dets = [dets];
 
   const itens = dets.map((det, idx) => {
-    const prod = det.prod || {};
-    const imp  = det.imposto || {};
+    const prod = block(det, 'prod');
+    const di   = block(prod, 'DI');
 
-    const ncm    = String(prod.NCM || '').replace(/\D/g, '').slice(0, 8);
-    const qtd    = num(prod.qCom);
-    const vlUnit = num(prod.vUnCom);
+    const ncm    = tag(prod, 'NCM').replace(/\D/g, '').slice(0, 8);
+    const qtd    = num(tag(prod, 'qCom'));
+    const vlUnit = num(tag(prod, 'vUnCom'));
 
     // II — a base do II é o valor aduaneiro do item
-    const ii     = imp.II || {};
-    const baseII = num(ii.vBC);
-    const vlII   = num(ii.vII);
-    const aliqII = baseII > 0 ? vlII / baseII : 0;
+    const iiBlock = block(det, 'II');
+    const baseII  = num(tag(iiBlock, 'vBC'));
+    const vlII    = num(tag(iiBlock, 'vII'));
+    const aliqII  = baseII > 0 ? vlII / baseII : 0;
 
     // IPI — base costuma ser valor aduaneiro + II
-    const ipiTrib = firstOf(imp.IPI, ['IPITrib', 'IPINT']);
-    const vlIPI   = num(ipiTrib.vIPI);
-    const aliqIPI = num(ipiTrib.pIPI) / 100;
-    const baseIPI = num(ipiTrib.vBC) || (baseII + vlII);
+    const ipiTrib = block(det, 'IPITrib') || block(det, 'IPINT');
+    const vlIPI   = num(tag(ipiTrib, 'vIPI'));
+    const aliqIPI = num(tag(ipiTrib, 'pIPI')) / 100;
+    const baseIPI = num(tag(ipiTrib, 'vBC')) || (baseII + vlII);
 
-    // PIS / COFINS
-    const pis      = firstOf(imp.PIS, ['PISOutr', 'PISAliq', 'PISNT', 'PISQtde']);
-    const vlPIS    = num(pis.vPIS);
-    const aliqPIS  = num(pis.pPIS) / 100;
+    // PIS / COFINS — pega o bloco inteiro (cobre PISOutr/PISAliq/PISNT etc.)
+    const pisBlock  = block(det, 'PIS');
+    const vlPIS     = num(tag(pisBlock, 'vPIS'));
+    const aliqPIS   = num(tag(pisBlock, 'pPIS')) / 100;
 
-    const cof       = firstOf(imp.COFINS, ['COFINSOutr', 'COFINSAliq', 'COFINSNT', 'COFINSQtde']);
-    const vlCOFINS  = num(cof.vCOFINS);
-    const aliqCOFINS = num(cof.pCOFINS) / 100;
+    const cofBlock   = block(det, 'COFINS');
+    const vlCOFINS   = num(tag(cofBlock, 'vCOFINS'));
+    const aliqCOFINS = num(tag(cofBlock, 'pCOFINS')) / 100;
 
     // AFRMM e nº da adição vêm da DI vinculada ao item
-    const di  = prod.DI || {};
-    const vlAFRMM = num(di.vAFRMM);
-    const adiRaw  = di.adi ? (Array.isArray(di.adi) ? di.adi[0] : di.adi) : {};
-    const nAdicao = parseInt(String(adiRaw.nAdicao || '1'), 10) || 1;
+    const vlAFRMM = num(tag(di, 'vAFRMM'));
+    const nAdicao = parseInt(tag(di, 'nAdicao') || '1', 10) || 1;
 
     return {
       ncm,
       nAdicao,
       colIdx: idx,
-      descricao: String(prod.xProd || '').trim(),
+      descricao: tag(prod, 'xProd'),
       vlUnit,
       qtd,
       vlTotal: baseII,   // valor aduaneiro = base do II
