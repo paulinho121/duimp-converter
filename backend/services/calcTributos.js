@@ -51,27 +51,28 @@ function calcularTributosAdicao(itens, config, taxaCambio) {
   const vlCOFINS  = itens.reduce((s, i) => s + i.vlCOFINS, 0);
   const vlAFRMM   = itens.reduce((s, i) => s + i.vlAFRMM, 0);
 
-  // Alíquotas para display no XML: usa config do NCM (valores oficiais)
-  // Os VALORES (vlII, vlIPI, etc.) vêm do Excel diretamente
-  // Fallback: alíquota real do primeiro item com valor > 0
-  function aliqReal(campo) {
+  // Alíquotas para display no XML: prioriza a alíquota REAL do espelho
+  // (NF-e/Excel), por item; a tabela fixa (config) é só fallback quando o
+  // espelho não informa. Os VALORES (vlII, vlIPI, etc.) já vêm do espelho.
+  // Normaliza para decimal (aceita 10,8% vindo como 10.8 ou como 0.108).
+  function normAliq(a) {
+    const v = parseFloat(a) || 0;
+    if (v <= 0) return 0;
+    return v > 1 ? v / 100 : v;
+  }
+  // Primeira alíquota > 0 informada pelos itens do espelho, já normalizada
+  function aliqEspelho(campo) {
     for (const it of itens) {
-      const v = it[campo];
-      if (v && v > 0) return v;
+      const v = normAliq(it[campo]);
+      if (v > 0) return v;
     }
-    return config[campo.replace('aliq', 'aliq')] || 0;
+    return 0;
   }
 
-  const aliqII  = config.aliqII  || aliqReal('aliqII');
-  const aliqIPI = config.aliqIPI || aliqReal('aliqIPI');
-  const aliqPIS = config.aliqPIS || aliqReal('aliqPIS');
-  // COFINS: usa o menor valor de alíquota presente nos itens (alíquota de redução)
-  // pois o XML real registra a alíquota base mesmo em regimes integrais
-  const aliqCOFINSMenor = itens.reduce((min, i) => {
-    const a = i.aliqCOFINS;
-    return (a && a > 0 && a < min) ? a : min;
-  }, config.aliqCOFINS || 1);
-  const aliqCOFINS = aliqCOFINSMenor < 1 ? aliqCOFINSMenor : (config.aliqCOFINS || 0);
+  const aliqII     = aliqEspelho('aliqII')     || config.aliqII     || 0;
+  const aliqIPI    = aliqEspelho('aliqIPI')    || config.aliqIPI    || 0;
+  const aliqPIS    = aliqEspelho('aliqPIS')    || config.aliqPIS    || 0;
+  const aliqCOFINS = aliqEspelho('aliqCOFINS') || config.aliqCOFINS || 0;
   const regimePIS     = config.regimePIS;
   const nomeRegimePIS = config.nomeRegimePIS;
 
