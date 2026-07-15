@@ -234,22 +234,31 @@ export default function App() {
                   </p>
                   <p className="text-green-200 text-xs mt-1">
                     Valor Aduaneiro + II + IPI + PIS + COFINS + AFRMM
+                    {result.resumo.entrouPorSP && ' + ICMS'}
                   </p>
                 </div>
                 <div className="text-right">
+                  {result.resumo.entrouPorSP && (
+                    <span className="inline-block mb-2 px-2.5 py-1 rounded-full bg-green-800/60 text-green-100 text-[11px] font-semibold uppercase tracking-wider">
+                      Entrada por SP · ICMS {Math.round((result.resumo.icmsAliquota || 0) * 100)}%
+                    </span>
+                  )}
                   <p className="text-green-100 text-xs uppercase tracking-widest mb-1">Valor Aduaneiro</p>
                   <p className="text-white text-2xl font-bold">{BRL(result.resumo.valorTotalBRL)}</p>
                 </div>
               </div>
 
               {/* Linha 2: tributos em cards */}
-              <div className="grid grid-cols-5 divide-x divide-gray-700">
+              <div className={`grid ${result.resumo.entrouPorSP ? 'grid-cols-6' : 'grid-cols-5'} divide-x divide-gray-700`}>
                 {[
                   { label: 'II',     value: result.resumo.iiTotal,     color: 'text-red-400' },
                   { label: 'IPI',    value: result.resumo.ipiTotal,    color: 'text-orange-400' },
                   { label: 'PIS',    value: result.resumo.pisTotal,    color: 'text-yellow-400' },
                   { label: 'COFINS', value: result.resumo.cofinsTotal, color: 'text-yellow-300' },
                   { label: 'AFRMM', value: result.resumo.afrmmTotal,  color: 'text-blue-400' },
+                  ...(result.resumo.entrouPorSP
+                    ? [{ label: 'ICMS', value: result.resumo.icmsTotal, color: 'text-green-400' }]
+                    : []),
                 ].map(({ label, value, color }) => (
                   <div key={label} className="px-5 py-4 text-center">
                     <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">{label}</p>

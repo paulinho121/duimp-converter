@@ -55,6 +55,14 @@ async function parseDuimp(buffer) {
   const recintoCodigo  = extract(/(\d{7})\s*-\s*FORTE/);
   const recintoNome    = extract(/(\d{7})\s*-\s*(FORTE[^\/\n]+)/i, 2)?.trim() || '';
 
+  // UF de desembaraço: derivada do código da unidade de despacho/entrada.
+  // Os 2 primeiros dígitos indicam a Região Fiscal; a 8ª RF (08) é São Paulo.
+  const codDesembaraco = extract(/Unidade de despacho:\s*(\d{7})/)
+                      || extract(/Unidade de Entrada\/Descarga:\s*(\d{7})/)
+                      || urfDespacho;
+  let ufDesembaraco = '';
+  if (/^08/.test(codDesembaraco)) ufDesembaraco = 'SP';
+
   // Telefone importador
   const telefone       = extract(/[Tt]el[:\s.]+(\d{2}[\s.]*\d{8,9})/);
 
@@ -110,6 +118,7 @@ async function parseDuimp(buffer) {
     dataRegistro,
     urfDespacho,
     urfNome: urfNome || '',
+    ufDesembaraco,
     embarqueLocal,
     recintoCodigo,
     recintoNome,

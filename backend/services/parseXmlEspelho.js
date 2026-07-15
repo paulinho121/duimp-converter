@@ -37,6 +37,9 @@ function parseXmlEspelho(buffer) {
     throw new Error('XML não reconhecido como NF-e (nenhum item <det> encontrado).');
   }
 
+  // UF de desembaraço (aparece na DI de cada item; usamos a do primeiro)
+  const ufDesembaraco = (xml.match(/<UFDesemb>([A-Z]{2})<\/UFDesemb>/) || [])[1] || '';
+
   const itens = dets.map((det, idx) => {
     const prod = block(det, 'prod');
     const di   = block(prod, 'DI');
@@ -44,6 +47,7 @@ function parseXmlEspelho(buffer) {
     const ncm    = tag(prod, 'NCM').replace(/\D/g, '').slice(0, 8);
     const qtd    = num(tag(prod, 'qCom'));
     const vlUnit = num(tag(prod, 'vUnCom'));
+    const despesas = num(tag(prod, 'vOutro'));  // outras despesas (compõem a base do ICMS)
 
     // II — a base do II é o valor aduaneiro do item
     const iiBlock = block(det, 'II');
@@ -85,10 +89,11 @@ function parseXmlEspelho(buffer) {
       vlPIS,  aliqPIS,
       vlCOFINS, aliqCOFINS,
       vlAFRMM,
+      despesas,
     };
   }).filter(i => i.ncm.length === 8 && i.vlTotal > 0);
 
-  return { itens };
+  return { itens, ufDesembaraco };
 }
 
 module.exports = parseXmlEspelho;

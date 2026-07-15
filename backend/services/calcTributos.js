@@ -102,8 +102,26 @@ function calcularTributosAdicao(itens, config, taxaCambio) {
   };
 }
 
+// ICMS de importação — cálculo "por dentro" (gross-up).
+// Base cheia = Valor Aduaneiro + II + IPI + PIS + COFINS + AFRMM + despesas.
+// Base do ICMS = base cheia / (1 - alíquota); ICMS = base × alíquota.
+// Alíquota padrão SP = 18%.
+const ALIQUOTA_ICMS_SP = 0.18;
+
+function calcularICMS(adicoes, aliquota = ALIQUOTA_ICMS_SP) {
+  const baseBruta = adicoes.reduce((s, a) =>
+    s + a.itens.reduce((x, i) =>
+      x + i.vlTotal + i.vlII + i.vlIPI + i.vlPIS + i.vlCOFINS + (i.vlAFRMM || 0) + (i.despesas || 0), 0), 0);
+
+  const baseCalculo = baseBruta / (1 - aliquota);
+  const valor = Math.round(baseCalculo * aliquota * 100) / 100;
+  return { aliquota, baseCalculo: Math.round(baseCalculo * 100) / 100, valor };
+}
+
 module.exports = {
   formatValorUnitario,
+  calcularICMS,
+  ALIQUOTA_ICMS_SP,
   formatQtdKg,
   formatValorMoeda,
   formatValorReais,

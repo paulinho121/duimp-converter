@@ -36,6 +36,7 @@ router.post('/convert', upload.fields([
 
     let adicoes;
     let taxaCambio;
+    let ufDesembaraco = dadosDuimp.ufDesembaraco || '';
 
     if (temXml) {
       taxaCambio = parseTaxa(req.body.taxaCambio);
@@ -43,6 +44,7 @@ router.post('/convert', upload.fields([
         return res.status(400).json({ success: false, error: 'Informe a taxa de câmbio (Dólar Fiscal) para o espelho em XML.' });
       }
       const dadosXml = parseXmlEspelho(req.files.xml[0].buffer);
+      ufDesembaraco = dadosXml.ufDesembaraco || ufDesembaraco;
       adicoes = groupByAdicao(dadosDuimp.itens, dadosXml.itens, taxaCambio);
     } else {
       const dadosExcel = parseExcel(req.files.excel[0].buffer);
@@ -59,7 +61,13 @@ router.post('/convert', upload.fields([
     const pisTotal      = adicoes.reduce((s, a) => s + a.itens.reduce((x, i) => x + i.vlPIS, 0), 0);
     const cofinsTotal   = adicoes.reduce((s, a) => s + a.itens.reduce((x, i) => x + i.vlCOFINS, 0), 0);
     const afrmmTotal    = adicoes.reduce((s, a) => s + a.itens.reduce((x, i) => x + i.vlAFRMM, 0), 0);
-    const totalNF       = valorTotalBRL + iiTotal + ipiTotal + pisTotal + cofinsTotal + afrmmTotal;
+
+    // ICMS: só é adicionado quando a importação entra por São Paulo
+    const entrouPorSP = ufDesembaraco === 'SP';
+    const icms        = entrouPorSP ? calcTributos.calcularICMS(adicoes) : { valor: 0, aliquota: 0, baseCalculo: 0 };
+    const icmsTotal   = icms.valor;
+
+    const totalNF = valorTotalBRL + iiTotal + ipiTotal + pisTotal + cofinsTotal + afrmmTotal + icmsTotal;
 
     const resumo = {
       totalItens:   adicoes.reduce((s, a) => s + a.itens.length, 0),
@@ -70,6 +78,11 @@ router.post('/convert', upload.fields([
       pisTotal,
       cofinsTotal,
       afrmmTotal,
+      icmsTotal,
+      icmsBase: icms.baseCalculo,
+      icmsAliquota: icms.aliquota,
+      ufDesembaraco,
+      entrouPorSP,
       totalNF,
     };
 

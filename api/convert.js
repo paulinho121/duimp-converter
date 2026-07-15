@@ -5,6 +5,7 @@ const parseExcel                   = require('../backend/services/parseExcel');
 const parseXmlEspelho              = require('../backend/services/parseXmlEspelho');
 const { groupByNcm, groupByAdicao } = require('../backend/services/groupByNcm');
 const buildXml                     = require('../backend/services/buildXml');
+const { calcularICMS }             = require('../backend/services/calcTributos');
 
 const upload = multer({ storage: multer.memoryStorage() }).fields([
   { name: 'duimp', maxCount: 1 },
@@ -49,6 +50,7 @@ module.exports = async (req, res) => {
 
     let adicoes;
     let taxaCambio;
+    let ufDesembaraco = dadosDuimp.ufDesembaraco || '';
 
     if (temXml) {
       taxaCambio = parseTaxa(req.body.taxaCambio);
@@ -56,6 +58,7 @@ module.exports = async (req, res) => {
         return res.status(400).json({ success: false, error: 'Informe a taxa de câmbio (Dólar Fiscal) para o espelho em XML.' });
       }
       const dadosXml = parseXmlEspelho(req.files.xml[0].buffer);
+      ufDesembaraco = dadosXml.ufDesembaraco || ufDesembaraco;
       adicoes = groupByAdicao(dadosDuimp.itens, dadosXml.itens, taxaCambio);
     } else {
       const dadosExcel = parseExcel(req.files.excel[0].buffer);
@@ -73,6 +76,12 @@ module.exports = async (req, res) => {
     const cofinsTotal   = adicoes.reduce((s, a) => s + a.itens.reduce((x, i) => x + i.vlCOFINS, 0), 0);
     const afrmmTotal    = adicoes.reduce((s, a) => s + a.itens.reduce((x, i) => x + i.vlAFRMM, 0), 0);
 
+    // ICMS: só é adicionado quando a importação entra por São Paulo
+    const entrouPorSP = ufDesembaraco === 'SP';
+    const icms        = entrouPorSP ? calcularICMS(adicoes) : { valor: 0, aliquota: 0, baseCalculo: 0 };
+    const icmsTotal   = icms.valor;
+    const totalNF     = valorTotalBRL + iiTotal + ipiTotal + pisTotal + cofinsTotal + afrmmTotal + icmsTotal;
+
     return res.json({
       success: true,
       numeroDI:   dadosDuimp.numeroDI,
@@ -84,7 +93,12 @@ module.exports = async (req, res) => {
         totalAdicoes: adicoes.length,
         valorTotalBRL,
         iiTotal, ipiTotal, pisTotal, cofinsTotal, afrmmTotal,
-        totalNF: valorTotalBRL + iiTotal + ipiTotal + pisTotal + cofinsTotal + afrmmTotal,
+        icmsTotal,
+        icmsBase: icms.baseCalculo,
+        icmsAliquota: icms.aliquota,
+        ufDesembaraco,
+        entrouPorSP,
+        totalNF,
       },
     });
   } catch (err) {
