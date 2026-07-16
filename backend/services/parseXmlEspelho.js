@@ -46,7 +46,6 @@ function parseXmlEspelho(buffer) {
 
     const ncm    = tag(prod, 'NCM').replace(/\D/g, '').slice(0, 8);
     const qtd    = num(tag(prod, 'qCom'));
-    const vlUnit = num(tag(prod, 'vUnCom'));
     const despesas = num(tag(prod, 'vOutro'));  // outras despesas (compõem a base do ICMS)
     const vProd    = num(tag(prod, 'vProd'));    // valor do produto (= aduaneiro + II)
 
@@ -77,6 +76,13 @@ function parseXmlEspelho(buffer) {
     const baseIIRaw = num(tag(iiBlock, 'vBC'));
     const baseII    = baseIIRaw || basePIS || (vProd - vlII);
     const aliqII    = baseII > 0 ? vlII / baseII : 0;
+
+    // Unitário da mercadoria = unitário do VALOR ADUANEIRO. Não usar vUnCom:
+    // na NF-e de importação ele é o unitário de vProd, que já embute o II
+    // (vProd = aduaneiro + II). O ERP deriva a base pelas linhas <mercadoria>
+    // (valorUnitario × quantidade) e aplica as alíquotas em cima — com vUnCom
+    // a base sairia inflada e o II/IPI viriam maiores que os da DUIMP.
+    const vlUnit = qtd > 0 ? baseII / qtd : 0;
 
     // IPI — base costuma ser valor aduaneiro + II (= vProd)
     const ipiTrib = block(det, 'IPITrib') || block(det, 'IPINT');

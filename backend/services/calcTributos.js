@@ -74,7 +74,10 @@ function calcularTributosAdicao(itens, config, taxaCambio, reducaoOverride) {
   }
 
   const aliqII     = aliqEspelho('aliqII')     || config.aliqII     || 0;
-  const aliqIPI    = aliqEspelho('aliqIPI')    || config.aliqIPI    || 0;
+  // IPI: quando o espelho não traz alíquota mas há IPI devido, cai na tabela.
+  // Se não há IPI devido (item isento/IPINT), a alíquota é 0 — sem isso o
+  // fallback da tabela faria o ERP recalcular IPI sobre item isento.
+  const aliqIPI    = aliqEspelho('aliqIPI')    || (vlIPI > 0 ? config.aliqIPI : 0) || 0;
 
   // PIS/COFINS: alíquota EFETIVA aplicada (valor devido ÷ base). Se estiver
   // bem abaixo da nominal, há redução. O usuário pode sobrepor a detecção.
