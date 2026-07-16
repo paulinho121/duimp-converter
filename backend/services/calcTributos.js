@@ -23,8 +23,11 @@ function formatValorTotalCV(totalBRL, taxaCambio) {
   return String(Math.round((totalBRL / taxa) * 10_000_000));
 }
 
+// Alíquota — 5 dígitos, percentual × 10000 (9,65% -> "00965").
+// Arredonda (não trunca): as alíquotas costumam vir de uma divisão
+// valor/base (9,65% chega como 0,0964995...) e o floor gerava 00964.
 function formatAliquota(percentualDecimal) {
-  return String(Math.floor(percentualDecimal * 10000)).padStart(5, '0');
+  return String(Math.round(percentualDecimal * 10000)).padStart(5, '0');
 }
 
 // Quantidade — 14 dígitos, qty × 10^5 (ERP divide por 10^5 para obter unidades)
@@ -88,12 +91,18 @@ function calcularTributosAdicao(itens, config, taxaCambio, reducaoOverride) {
     ? reducaoAuto
     : !!reducaoOverride;
 
+  // Sem redução o ad valorem é a alíquota NOMINAL. Prioriza a declarada no
+  // espelho (pPIS/pCOFINS = 2,10 / 9,65) em vez da efetiva calculada por
+  // valor÷base, que chega com ruído (2,0999... / 9,6499...) e viraria 2,09/9,64.
+  const aliqPisDeclarada = aliqEspelho('aliqPIS');
+  const aliqCofDeclarada = aliqEspelho('aliqCOFINS');
+
   // Com redução (padrão do extrato da DUIMP): ad valorem = alíquota CHEIA,
   // e a alíquota reduzida vai no campo próprio. Sem redução: ad valorem = a
-  // própria alíquota aplicada (cheia) e reduzida zerada.
-  const aliqPisAdVal    = reducao ? PIS_ALIQ_CHEIA    : (aliqPisAplicada    || PIS_ALIQ_CHEIA);
+  // própria alíquota nominal e reduzida zerada.
+  const aliqPisAdVal    = reducao ? PIS_ALIQ_CHEIA    : (aliqPisDeclarada || aliqPisAplicada    || PIS_ALIQ_CHEIA);
   const aliqPisReduzida = reducao ? aliqPisAplicada   : 0;
-  const aliqCofAdVal    = reducao ? COFINS_ALIQ_CHEIA : (aliqCofinsAplicada || COFINS_ALIQ_CHEIA);
+  const aliqCofAdVal    = reducao ? COFINS_ALIQ_CHEIA : (aliqCofDeclarada || aliqCofinsAplicada || COFINS_ALIQ_CHEIA);
   const aliqCofReduzida = reducao ? aliqCofinsAplicada : 0;
   const regimePIS     = reducao ? '6' : '1';
   const nomeRegimePIS = reducao ? 'REDUCAO' : 'RECOLHIMENTO INTEGRAL';
