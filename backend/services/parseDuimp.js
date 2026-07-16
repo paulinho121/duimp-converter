@@ -19,7 +19,11 @@ async function parseDuimp(buffer) {
     return m ? m[group].trim() : '';
   };
 
-  const numeroDI       = extract(/(\d{2}BR\d{10})/);
+  // Número da DUIMP. No extrato ele vem com o dígito verificador separado por
+  // hífen ("26BR0001157535-3"); a forma canônica (a mesma que a NF-e usa em
+  // <nDI>) é sem o hífen: "26BR00011575353".
+  const diComDV        = text.match(/(\d{2}BR\d{10})-(\d)/);
+  const numeroDI       = diComDV ? diComDV[1] + diComDV[2] : extract(/(\d{2}BR\d{10,11})/);
   const cnpjRaw        = extract(/CNPJ do importador:\s*([\d.\/\-]+)/);
   const nomeImportador = extract(/Nome do importador:\s*(.+)/);
   const hbl            = extract(/HBL No\.:\s*([A-Z0-9]+)/i);
