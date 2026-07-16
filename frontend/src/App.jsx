@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import UploadZone from './components/UploadZone';
 import ItemsTable from './components/ItemsTable';
 import DownloadButton from './components/DownloadButton';
@@ -19,6 +19,7 @@ export default function App() {
   const [adicoes, setAdicoes] = useState([]);
   const [reducaoOverrides, setReducaoOverrides] = useState([]);
   const [debugInfo, setDebugInfo] = useState(null);
+  const xmlInputRef = useRef();
 
   const espelhoFile = mode === 'xml' ? xmlFiles : excelFile;
   const temEspelho = mode === 'xml' ? xmlFiles.length > 0 : !!excelFile;
@@ -33,6 +34,18 @@ export default function App() {
       lista.forEach((f) => map.set(f.name + f.size, f));
       return Array.from(map.values());
     });
+  }
+
+  // Botão "Adicionar XML": abre o seletor e acrescenta à lista (quantos quiser).
+  function handleAddXmlClick() {
+    xmlInputRef.current?.click();
+  }
+  function handleXmlInputChange(e) {
+    if (e.target.files?.length) handleXmlFiles(Array.from(e.target.files));
+    e.target.value = ''; // permite re-selecionar o mesmo arquivo depois
+  }
+  function removeXml(idx) {
+    setXmlFiles((prev) => prev.filter((_, i) => i !== idx));
   }
 
   // Preserva as edições do usuário (código ERP, tipo IP, descrição) ao reprocessar
@@ -172,32 +185,68 @@ export default function App() {
                   onFile={setExcelFile}
                 />
               ) : (
-                <UploadZone
-                  label="Espelho NF (XML)"
-                  accept=".xml"
-                  icon="🧾"
-                  file={xmlFiles}
-                  onFile={handleXmlFiles}
-                  multiple
-                />
+                <div
+                  className={`flex flex-col border-2 border-dashed rounded-xl p-6 transition-colors
+                    ${xmlFiles.length ? 'border-green-500 bg-green-50' : 'border-gray-300 bg-white'}`}
+                >
+                  <div className="flex flex-col items-center mb-3">
+                    <span className="text-4xl mb-2">🧾</span>
+                    <p className="font-semibold text-gray-700">Espelho NF (XML)</p>
+                    <p className="mt-1 text-xs text-gray-400 text-center">
+                      Adicione um ou vários NF-e da mesma DUIMP
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddXmlClick}
+                    className="mb-3 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg"
+                  >
+                    ➕ Adicionar XML
+                  </button>
+                  <input
+                    ref={xmlInputRef}
+                    type="file"
+                    accept=".xml"
+                    multiple
+                    className="hidden"
+                    onChange={handleXmlInputChange}
+                  />
+
+                  {xmlFiles.length > 0 ? (
+                    <>
+                      <ul className="space-y-1 text-sm max-h-48 overflow-auto">
+                        {xmlFiles.map((f, i) => (
+                          <li
+                            key={f.name + f.size}
+                            className="flex items-center justify-between bg-white rounded px-2 py-1 border border-green-200"
+                          >
+                            <span className="truncate text-green-700 mr-2">🧾 {f.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeXml(i)}
+                              title="Remover"
+                              className="shrink-0 text-red-500 hover:text-red-700 text-xs font-bold"
+                            >
+                              ✕
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      <button
+                        type="button"
+                        onClick={() => setXmlFiles([])}
+                        className="mt-2 self-center text-xs text-red-600 hover:text-red-800 underline"
+                      >
+                        Limpar todos ({xmlFiles.length})
+                      </button>
+                    </>
+                  ) : (
+                    <p className="text-center text-xs text-gray-400">Nenhum XML adicionado</p>
+                  )}
+                </div>
               )}
             </div>
-
-            {/* Lista de XMLs adicionados — permite limpar se selecionou o errado */}
-            {mode === 'xml' && xmlFiles.length > 0 && (
-              <div className="mb-6 -mt-2 text-right">
-                <span className="text-xs text-gray-500 mr-3">
-                  {xmlFiles.length} XML(s) — uma DUIMP pode vir repartida em vários NF-e
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setXmlFiles([])}
-                  className="text-xs text-red-600 hover:text-red-800 underline"
-                >
-                  Limpar XMLs
-                </button>
-              </div>
-            )}
 
             {/* Taxa de câmbio — obrigatória no modo XML (a NF-e não a contém) */}
             {mode === 'xml' && (
