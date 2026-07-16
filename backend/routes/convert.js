@@ -30,11 +30,11 @@ function parseOverrides(v) {
 router.post('/convert', upload.fields([
   { name: 'duimp', maxCount: 1 },
   { name: 'excel', maxCount: 1 },
-  { name: 'xml',   maxCount: 1 },
+  { name: 'xml',   maxCount: 50 },
 ]), async (req, res) => {
   try {
     const temExcel = !!req.files?.excel;
-    const temXml   = !!req.files?.xml;
+    const temXml   = !!req.files?.xml?.length;
 
     if (!req.files?.duimp || (!temExcel && !temXml)) {
       return res.status(400).json({
@@ -55,9 +55,15 @@ router.post('/convert', upload.fields([
       if (!taxaCambio) {
         return res.status(400).json({ success: false, error: 'Informe a taxa de câmbio (Dólar Fiscal) para o espelho em XML.' });
       }
-      const dadosXml = parseXmlEspelho(req.files.xml[0].buffer);
-      ufDesembaraco = dadosXml.ufDesembaraco || ufDesembaraco;
-      adicoes = groupByAdicao(dadosDuimp.itens, dadosXml.itens, taxaCambio, reducaoOverrides);
+      // Uma DUIMP pode vir repartida em vários NF-e (ex.: separadas por
+      // alíquota de ICMS). Cada XML traz um subconjunto das adições; juntamos
+      // todos e ordenamos por nSeqAdic para reconstituir a DI completa.
+      const dadosXmlList = req.files.xml.map((f) => parseXmlEspelho(f.buffer));
+      ufDesembaraco = dadosXmlList.find((x) => x.ufDesembaraco)?.ufDesembaraco || ufDesembaraco;
+      const itensXml = dadosXmlList
+        .flatMap((x) => x.itens)
+        .sort((a, b) => a.nAdicao - b.nAdicao);
+      adicoes = groupByAdicao(dadosDuimp.itens, itensXml, taxaCambio, reducaoOverrides);
     } else {
       const dadosExcel = parseExcel(req.files.excel[0].buffer);
       taxaCambio = dadosExcel.taxaCambio;

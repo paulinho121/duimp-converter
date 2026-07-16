@@ -10,7 +10,7 @@ export default function App() {
   const [mode, setMode] = useState('excel'); // 'excel' | 'xml'
   const [duimpFile, setDuimpFile] = useState(null);
   const [excelFile, setExcelFile] = useState(null);
-  const [xmlFile, setXmlFile] = useState(null);
+  const [xmlFiles, setXmlFiles] = useState([]);
   const [taxaCambio, setTaxaCambio] = useState('');
   const [loading, setLoading] = useState(false);
   const [reprocessando, setReprocessando] = useState(false);
@@ -20,8 +20,20 @@ export default function App() {
   const [reducaoOverrides, setReducaoOverrides] = useState([]);
   const [debugInfo, setDebugInfo] = useState(null);
 
-  const espelhoFile = mode === 'xml' ? xmlFile : excelFile;
-  const podeProcessar = duimpFile && espelhoFile && (mode !== 'xml' || taxaCambio.trim());
+  const espelhoFile = mode === 'xml' ? xmlFiles : excelFile;
+  const temEspelho = mode === 'xml' ? xmlFiles.length > 0 : !!excelFile;
+  const podeProcessar = duimpFile && temEspelho && (mode !== 'xml' || taxaCambio.trim());
+
+  // Acumula os XMLs selecionados (a DUIMP pode vir repartida em vários NF-e),
+  // permitindo adicionar um a um sem sobrescrever, sem duplicar nome+tamanho.
+  function handleXmlFiles(novos) {
+    const lista = Array.isArray(novos) ? novos : [novos];
+    setXmlFiles((prev) => {
+      const map = new Map(prev.map((f) => [f.name + f.size, f]));
+      lista.forEach((f) => map.set(f.name + f.size, f));
+      return Array.from(map.values());
+    });
+  }
 
   // Preserva as edições do usuário (código ERP, tipo IP, descrição) ao reprocessar
   function mergeEdits(oldAd, newAd) {
@@ -35,7 +47,7 @@ export default function App() {
   }
 
   async function handleConvert() {
-    if (!duimpFile || !espelhoFile) {
+    if (!duimpFile || !temEspelho) {
       setError('Selecione o PDF da DUIMP e o espelho antes de processar.');
       return;
     }
@@ -94,7 +106,7 @@ export default function App() {
     setAdicoes([]);
     setDuimpFile(null);
     setExcelFile(null);
-    setXmlFile(null);
+    setXmlFiles([]);
     setTaxaCambio('');
     setReducaoOverrides([]);
     setError('');
@@ -164,11 +176,28 @@ export default function App() {
                   label="Espelho NF (XML)"
                   accept=".xml"
                   icon="🧾"
-                  file={xmlFile}
-                  onFile={setXmlFile}
+                  file={xmlFiles}
+                  onFile={handleXmlFiles}
+                  multiple
                 />
               )}
             </div>
+
+            {/* Lista de XMLs adicionados — permite limpar se selecionou o errado */}
+            {mode === 'xml' && xmlFiles.length > 0 && (
+              <div className="mb-6 -mt-2 text-right">
+                <span className="text-xs text-gray-500 mr-3">
+                  {xmlFiles.length} XML(s) — uma DUIMP pode vir repartida em vários NF-e
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setXmlFiles([])}
+                  className="text-xs text-red-600 hover:text-red-800 underline"
+                >
+                  Limpar XMLs
+                </button>
+              </div>
+            )}
 
             {/* Taxa de câmbio — obrigatória no modo XML (a NF-e não a contém) */}
             {mode === 'xml' && (

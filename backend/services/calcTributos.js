@@ -126,20 +126,30 @@ function calcularTributosAdicao(itens, config, taxaCambio, reducaoOverride) {
   };
 }
 
-// ICMS de importação — cálculo "por dentro" (gross-up).
-// Base cheia = Valor Aduaneiro + II + IPI + PIS + COFINS + AFRMM + despesas.
+// ICMS de importação — cálculo "por dentro" (gross-up), item a item.
+// Base cheia do item = Valor Aduaneiro + II + IPI + PIS + COFINS + AFRMM + despesas.
 // Base do ICMS = base cheia / (1 - alíquota); ICMS = base × alíquota.
-// Alíquota padrão SP = 18%.
+// A alíquota é a de CADA item (pICMS do espelho); quando o item não a informa
+// (ex.: espelho em Excel), usa a padrão de SP (18%).
 const ALIQUOTA_ICMS_SP = 0.18;
 
-function calcularICMS(adicoes, aliquota = ALIQUOTA_ICMS_SP) {
-  const baseBruta = adicoes.reduce((s, a) =>
-    s + a.itens.reduce((x, i) =>
-      x + i.vlTotal + i.vlII + i.vlIPI + i.vlPIS + i.vlCOFINS + (i.vlAFRMM || 0) + (i.despesas || 0), 0), 0);
-
-  const baseCalculo = baseBruta / (1 - aliquota);
-  const valor = Math.round(baseCalculo * aliquota * 100) / 100;
-  return { aliquota, baseCalculo: Math.round(baseCalculo * 100) / 100, valor };
+function calcularICMS(adicoes, aliquotaPadrao = ALIQUOTA_ICMS_SP) {
+  let baseCalculo = 0;
+  let valor = 0;
+  for (const a of adicoes) {
+    for (const i of a.itens) {
+      const aliq = i.aliqICMS > 0 ? i.aliqICMS : aliquotaPadrao;
+      const bruta = i.vlTotal + i.vlII + i.vlIPI + i.vlPIS + i.vlCOFINS + (i.vlAFRMM || 0) + (i.despesas || 0);
+      const base = bruta / (1 - aliq);
+      baseCalculo += base;
+      valor += base * aliq;
+    }
+  }
+  baseCalculo = Math.round(baseCalculo * 100) / 100;
+  valor = Math.round(valor * 100) / 100;
+  // Alíquota efetiva (para exibição), já que pode haver alíquotas diferentes.
+  const aliquota = baseCalculo > 0 ? valor / baseCalculo : aliquotaPadrao;
+  return { aliquota, baseCalculo, valor };
 }
 
 module.exports = {

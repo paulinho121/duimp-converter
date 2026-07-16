@@ -10,7 +10,9 @@ export async function convertFiles(duimpFile, espelhoFile, mode = 'excel', taxaC
   const form = new FormData();
   form.append('duimp', duimpFile);
   if (mode === 'xml') {
-    form.append('xml', espelhoFile);
+    // espelhoFile pode ser um único File ou um array (DUIMP repartida em vários NF-e)
+    const xmls = Array.isArray(espelhoFile) ? espelhoFile : [espelhoFile];
+    xmls.forEach((f) => form.append('xml', f));
     form.append('taxaCambio', taxaCambio);
   } else {
     form.append('excel', espelhoFile);

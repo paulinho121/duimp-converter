@@ -50,35 +50,51 @@ function parseXmlEspelho(buffer) {
     const despesas = num(tag(prod, 'vOutro'));  // outras despesas (compõem a base do ICMS)
     const vProd    = num(tag(prod, 'vProd'));    // valor do produto (= aduaneiro + II)
 
-    // II — a base do II é o valor aduaneiro do item
+    // II — valor do imposto
     const iiBlock = block(det, 'II');
-    const baseII  = num(tag(iiBlock, 'vBC'));
     const vlII    = num(tag(iiBlock, 'vII'));
-    const aliqII  = baseII > 0 ? vlII / baseII : 0;
-
-    // IPI — base costuma ser valor aduaneiro + II
-    const ipiTrib = block(det, 'IPITrib') || block(det, 'IPINT');
-    const vlIPI   = num(tag(ipiTrib, 'vIPI'));
-    const aliqIPI = num(tag(ipiTrib, 'pIPI')) / 100;
-    const baseIPI = num(tag(ipiTrib, 'vBC')) || (baseII + vlII);
 
     // PIS / COFINS — pega o bloco inteiro (cobre PISOutr/PISAliq/PISNT etc.)
     const pisBlock  = block(det, 'PIS');
     const vlPIS     = num(tag(pisBlock, 'vPIS'));
     const aliqPIS   = num(tag(pisBlock, 'pPIS')) / 100;
+    const basePIS   = num(tag(pisBlock, 'vBC'));  // base do PIS/COFINS-Imp = valor aduaneiro
 
     const cofBlock   = block(det, 'COFINS');
     const vlCOFINS   = num(tag(cofBlock, 'vCOFINS'));
     const aliqCOFINS = num(tag(cofBlock, 'pCOFINS')) / 100;
 
-    // AFRMM e nº da adição vêm da DI vinculada ao item
+    // ICMS — alíquota do item (pICMS). A NF-e reparte as adições por alíquota
+    // de ICMS (ex.: 18% / 12% / 8,8%); guardamos a alíquota real para o cálculo
+    // "por dentro" usar a de cada item em vez de uma alíquota única.
+    const icmsBlock = block(det, 'ICMS');
+    const aliqICMS  = num(tag(icmsBlock, 'pICMS')) / 100;
+
+    // Valor aduaneiro (base do II). Alguns espelhos de NF-e trazem <II><vBC>
+    // zerado (mesmo com II devido); nesses casos derivamos o aduaneiro da base
+    // do PIS/COFINS-Importação, que incide exatamente sobre o valor aduaneiro
+    // (equivale a vProd − vII). Sem isso o item cai fora pelo filtro vlTotal>0.
+    const baseIIRaw = num(tag(iiBlock, 'vBC'));
+    const baseII    = baseIIRaw || basePIS || (vProd - vlII);
+    const aliqII    = baseII > 0 ? vlII / baseII : 0;
+
+    // IPI — base costuma ser valor aduaneiro + II (= vProd)
+    const ipiTrib = block(det, 'IPITrib') || block(det, 'IPINT');
+    const vlIPI   = num(tag(ipiTrib, 'vIPI'));
+    const aliqIPI = num(tag(ipiTrib, 'pIPI')) / 100;
+    const baseIPI = num(tag(ipiTrib, 'vBC')) || (baseII + vlII);
+
+    // AFRMM e nº da adição vêm da DI vinculada ao item. Na NF-e o número
+    // sequencial da adição é <adi><nSeqAdic>; casamos o item ao PDF por ele.
     const vlAFRMM = num(tag(di, 'vAFRMM'));
-    const nAdicao = parseInt(tag(di, 'nAdicao') || '1', 10) || 1;
+    const nAdicao = parseInt(tag(di, 'nSeqAdic') || tag(di, 'nAdicao') || '', 10) || (idx + 1);
 
     return {
       ncm,
       nAdicao,
-      colIdx: idx,
+      // Índice do item no PDF da DUIMP: nSeqAdic é 1-based e segue a ordem das
+      // adições no extrato, então colIdx = nSeqAdic − 1 casa item-a-item.
+      colIdx: nAdicao - 1,
       descricao: tag(prod, 'xProd'),
       vlUnit,
       qtd,
@@ -89,6 +105,7 @@ function parseXmlEspelho(buffer) {
       vlIPI,  aliqIPI,
       vlPIS,  aliqPIS,
       vlCOFINS, aliqCOFINS,
+      aliqICMS,
       vlAFRMM,
       despesas,
       vProd,
