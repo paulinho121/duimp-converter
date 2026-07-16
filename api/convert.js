@@ -10,7 +10,7 @@ const { calcularICMS }             = require('../backend/services/calcTributos')
 const upload = multer({ storage: multer.memoryStorage() }).fields([
   { name: 'duimp', maxCount: 1 },
   { name: 'excel', maxCount: 1 },
-  { name: 'xml',   maxCount: 1 },
+  { name: 'xml',   maxCount: 50 },
 ]);
 
 // Converte a taxa de câmbio informada na tela (aceita "5,0139" ou "5.0139")
@@ -51,7 +51,7 @@ module.exports = async (req, res) => {
     await runMiddleware(req, res, upload);
 
     const temExcel = !!req.files?.excel;
-    const temXml   = !!req.files?.xml;
+    const temXml   = !!req.files?.xml?.length;
 
     if (!req.files?.duimp || (!temExcel && !temXml)) {
       return res.status(400).json({ success: false, error: 'Envie o PDF (duimp) e o espelho: XLSX (excel) ou XML (xml).' });
@@ -69,9 +69,15 @@ module.exports = async (req, res) => {
       if (!taxaCambio) {
         return res.status(400).json({ success: false, error: 'Informe a taxa de câmbio (Dólar Fiscal) para o espelho em XML.' });
       }
-      const dadosXml = parseXmlEspelho(req.files.xml[0].buffer);
-      ufDesembaraco = dadosXml.ufDesembaraco || ufDesembaraco;
-      adicoes = groupByAdicao(dadosDuimp.itens, dadosXml.itens, taxaCambio, reducaoOverrides);
+      // Uma DUIMP pode vir repartida em vários NF-e (ex.: separadas por
+      // alíquota de ICMS). Cada XML traz um subconjunto das adições; juntamos
+      // todos e ordenamos por nSeqAdic para reconstituir a DI completa.
+      const dadosXmlList = req.files.xml.map((f) => parseXmlEspelho(f.buffer));
+      ufDesembaraco = dadosXmlList.find((x) => x.ufDesembaraco)?.ufDesembaraco || ufDesembaraco;
+      const itensXml = dadosXmlList
+        .flatMap((x) => x.itens)
+        .sort((a, b) => a.nAdicao - b.nAdicao);
+      adicoes = groupByAdicao(dadosDuimp.itens, itensXml, taxaCambio, reducaoOverrides);
     } else {
       const dadosExcel = parseExcel(req.files.excel[0].buffer);
       taxaCambio = dadosExcel.taxaCambio;
